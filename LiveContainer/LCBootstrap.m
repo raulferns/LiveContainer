@@ -629,6 +629,13 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     }
     NSLog(@"[LCBootstrap] loaded bundle");
 
+    if (isSideStore) {
+        void (*installSideStoreHooksFunc)(void) = dlsym(RTLD_DEFAULT, "installSideStoreHooks");
+        if (installSideStoreHooksFunc) {
+            installSideStoreHooksFunc();
+        }
+    }
+
     // Find main()
     appMain = getAppEntryPoint(appHandle);
     if (!appMain) {

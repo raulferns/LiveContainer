@@ -105,20 +105,7 @@ jobs:
           name: LiveContainer.ipa
           path: LiveContainer.ipa
 
-      - name: Download SideStore Nightly IPA
-        shell: bash
-        run: |
-          curl \
-            --fail \
-            --location \
-            --retry 3 \
-            --output "LiveContainer+SideStore.ipa" \
-            "https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa"
-
-          echo "SideStore nightly IPA downloaded:"
-          ls -lh "LiveContainer+SideStore.ipa"
-
-      - name: Upload SideStore IPA
+      - name: Upload LiveContainer+SideStore IPA
         uses: actions/upload-artifact@v4
         with:
           name: LiveContainer+SideStore.ipa

@@ -192,44 +192,51 @@ static void SSInstallVersionWindow(UIWindowScene *windowScene)
 
 
 void installSideStoreHooks(void) {
-
-    swizzleClassMethod(NSBundle.class, @selector(appbundleIdentifier), @selector(hook_appbundleIdentifier));
-    swizzleClassMethod(NSBundle.class, @selector(storeAppBundleIdentifier), @selector(hook_storeAppBundleIdentifier));
-    swizzle(NSBundle.class, @selector(altstoreAppGroup), @selector(hook_altstoreAppGroup));
-    swizzleClassMethod(NSBundle.class, @selector(activeBundle), @selector(hook_activeBundle));
-    swizzleClassMethod(NSBundle.class, @selector(baseAltStoreAppGroupID), @selector(hook_baseAltStoreAppGroupID));
-    
-    // replace altStoreSourceURL
-    Method altStoreSourceURLMethod = class_getClassMethod(PrivClass(Source), @selector(altStoreSourceURL));
-    method_setImplementation(altStoreSourceURLMethod, (IMP)SideStoreSource_hook_altStoreSourceURL);
-    
-    if (!NSUserDefaults.isLiveProcess) {
-        // add escape button
-        Method viewDidLoadMethod = class_getInstanceMethod(PrivClass(MyAppsViewController), @selector(viewDidLoad));
-        SideStoreMyAppsViewController_orig_viewDidload = (void (*)(UICollectionViewController *, SEL))method_getImplementation(viewDidLoadMethod);
-        method_setImplementation(viewDidLoadMethod, (IMP)SideStoreMyAppsViewController_hook_viewDidload);
-        class_addMethod(PrivClass(MyAppsViewController), @selector(escapeButtonTapped:), (IMP)SideStoreMyAppsViewController_hook_escapeButtonTapped, "v@:@");
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        swizzleClassMethod(NSBundle.class, @selector(appbundleIdentifier), @selector(hook_appbundleIdentifier));
+        swizzleClassMethod(NSBundle.class, @selector(storeAppBundleIdentifier), @selector(hook_storeAppBundleIdentifier));
+        swizzle(NSBundle.class, @selector(altstoreAppGroup), @selector(hook_altstoreAppGroup));
+        swizzleClassMethod(NSBundle.class, @selector(activeBundle), @selector(hook_activeBundle));
+        swizzleClassMethod(NSBundle.class, @selector(baseAltStoreAppGroupID), @selector(hook_baseAltStoreAppGroupID));
         
-        // add version number
-        SSVersionWindows = [NSMutableDictionary dictionary];
-
-        SSSceneObserver =
-        [NSNotificationCenter.defaultCenter addObserverForName:UISceneDidActivateNotification
-                                                        object:nil
-                                                         queue:NSOperationQueue.mainQueue
-                                                    usingBlock:^(NSNotification *notification) {
-            UIScene *scene = notification.object;
-            
-            if ([scene isKindOfClass:UIWindowScene.class]) {
-                SSInstallVersionWindow((UIWindowScene *)scene);
+        // replace altStoreSourceURL
+        Class sourceClass = PrivClass(Source);
+        if (sourceClass) {
+            Method altStoreSourceURLMethod = class_getClassMethod(sourceClass, @selector(altStoreSourceURL));
+            if (altStoreSourceURLMethod) {
+                method_setImplementation(altStoreSourceURLMethod, (IMP)SideStoreSource_hook_altStoreSourceURL);
             }
-        }];
+        }
         
-        
-        
-    }
-    
+        if (!NSUserDefaults.isLiveProcess) {
+            // add escape button
+            Class myAppsVCClass = PrivClass(MyAppsViewController);
+            if (myAppsVCClass) {
+                Method viewDidLoadMethod = class_getInstanceMethod(myAppsVCClass, @selector(viewDidLoad));
+                if (viewDidLoadMethod) {
+                    SideStoreMyAppsViewController_orig_viewDidload = (void (*)(UICollectionViewController *, SEL))method_getImplementation(viewDidLoadMethod);
+                    method_setImplementation(viewDidLoadMethod, (IMP)SideStoreMyAppsViewController_hook_viewDidload);
+                    class_addMethod(myAppsVCClass, @selector(escapeButtonTapped:), (IMP)SideStoreMyAppsViewController_hook_escapeButtonTapped, "v@:@");
+                }
+            }
+            
+            // add version number
+            SSVersionWindows = [NSMutableDictionary dictionary];
 
+            SSSceneObserver =
+            [NSNotificationCenter.defaultCenter addObserverForName:UISceneDidActivateNotification
+                                                            object:nil
+                                                             queue:NSOperationQueue.mainQueue
+                                                        usingBlock:^(NSNotification *notification) {
+                UIScene *scene = notification.object;
+                
+                if ([scene isKindOfClass:UIWindowScene.class]) {
+                    SSInstallVersionWindow((UIWindowScene *)scene);
+                }
+            }];
+        }
+    });
 }
 #pragma clang diagnostic pop
 
