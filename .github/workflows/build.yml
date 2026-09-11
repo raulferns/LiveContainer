@@ -11,6 +11,7 @@ type: boolean
 required: false
 
 jobs:
+
 build:
 name: Build using xcodebuild command
 runs-on: macos-latest
@@ -20,14 +21,10 @@ env:
   scheme: LiveContainer
   archive_path: archive
 
-outputs:
-  scheme: ${{ steps.scheme.outputs.scheme }}
-  archive_path: archive
-  artifact: LiveContainer.ipa
-  artifact2: LiveContainer+SideStore.ipa
-
 steps:
-  - uses: maxim-lobanov/setup-xcode@v1
+
+  - name: Setup Xcode
+    uses: maxim-lobanov/setup-xcode@v1
     with:
       xcode-version: '26.2'
 
@@ -38,9 +35,9 @@ steps:
 
   - name: Set Scheme
     id: scheme
+    shell: bash
     run: |
-      if [ "$scheme" = "default" ]
-      then
+      if [ "$scheme" = "default" ]; then
         scheme_list=$(xcodebuild -list -json | tr -d "\n")
         scheme=$(echo "$scheme_list" | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
         echo "Using default scheme: $scheme"
@@ -50,45 +47,58 @@ steps:
 
       echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
 
-  - name: Set filetype_parameter
+  - name: Set filetype parameter
     id: filetype_parameter
+    shell: bash
     run: |
-      filetype_parameter=$(ls -A | grep -i '\.xcworkspace$' && echo workspace || echo project)
+      if ls -A | grep -qi '\.xcworkspace$'; then
+        filetype_parameter="workspace"
+      else
+        filetype_parameter="project"
+      fi
+
       echo "filetype_parameter=$filetype_parameter" >> "$GITHUB_OUTPUT"
 
-  - name: Set file_to_build
+  - name: Set file to build
     id: file_to_build
+    shell: bash
     run: |
       file_to_build=$(ls -A | grep -i '\.xcworkspace$' || ls -A | grep -i '\.xcodeproj$')
       file_to_build=$(echo "$file_to_build" | awk '{$1=$1;print}')
+
       echo "file_to_build=$file_to_build" >> "$GITHUB_OUTPUT"
 
   - name: Archive
     env:
-      scheme: ${{ steps.scheme.outputs.scheme }}
-      filetype_parameter: ${{ steps.filetype_parameter.outputs.filetype_parameter }}
-      file_to_build: ${{ steps.file_to_build.outputs.file_to_build }}
+      BUILD_SCHEME: ${{ steps.scheme.outputs.scheme }}
+      FILETYPE_PARAMETER: ${{ steps.filetype_parameter.outputs.filetype_parameter }}
+      FILE_TO_BUILD: ${{ steps.file_to_build.outputs.file_to_build }}
+    shell: bash
     run: |
       xcodebuild archive \
         -archivePath "$archive_path" \
-        -scheme "$scheme" \
-        -"$filetype_parameter" "$file_to_build" \
+        -scheme "$BUILD_SCHEME" \
+        -"$FILETYPE_PARAMETER" "$FILE_TO_BUILD" \
         -sdk iphoneos \
         -arch arm64 \
         -configuration Release \
-        | xcpretty && exit ${PIPESTATUS[0]}
+        | xcpretty
+
+      exit ${PIPESTATUS[0]}
 
   - name: Tar Build Artifact
+    shell: bash
     run: |
       tar -cvf "$archive_path.xcarchive.tar" "$archive_path.xcarchive"
 
-  - name: Upload Archive Artifact
+  - name: Upload Archive
     uses: actions/upload-artifact@v4
     with:
-      name: ${{ env.archive_path }}.xcarchive.tar
-      path: ${{ env.archive_path }}.xcarchive.tar
+      name: archive.xcarchive.tar
+      path: archive.xcarchive.tar
 
   - name: Create IPA
+    shell: bash
     run: |
       sh .github/build_github.sh
 
@@ -99,17 +109,19 @@ steps:
       path: LiveContainer.ipa
 
   - name: Download SideStore Nightly IPA
+    shell: bash
     run: |
-      curl -L \
+      curl \
         --fail \
+        --location \
         --retry 3 \
-        -o LiveContainer+SideStore.ipa \
+        --output "LiveContainer+SideStore.ipa" \
         "https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa"
 
-      echo "Downloaded SideStore nightly IPA:"
-      ls -lh LiveContainer+SideStore.ipa
+      echo "SideStore nightly IPA downloaded:"
+      ls -lh "LiveContainer+SideStore.ipa"
 
-  - name: Upload LiveContainer+SideStore IPA
+  - name: Upload SideStore IPA
     uses: actions/upload-artifact@v7
     with:
       name: LiveContainer+SideStore.ipa
@@ -123,7 +135,7 @@ name: Nightly Release
 permissions:
   contents: write
 
-if: inputs.release__nightly || github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+if: ${{ inputs.release__nightly || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
 
 runs-on: ubuntu-latest
 
@@ -135,21 +147,23 @@ concurrency:
   cancel-in-progress: true
 
 steps:
+
   - name: Checkout
     uses: actions/checkout@v3
 
   - name: Download LiveContainer IPA
     uses: actions/download-artifact@v8
     with:
-      name: ${{ needs.build.outputs.artifact }}
+      name: LiveContainer.ipa
 
-  - name: Download LiveContainer+SideStore IPA
+  - name: Download SideStore IPA
     uses: actions/download-artifact@v8
     with:
-      name: ${{ needs.build.outputs.artifact2 }}
+      name: LiveContainer+SideStore.ipa
 
   - name: Get Commit Info
     id: commit_info
+    shell: bash
     run: |
       COMMIT_SHA=$(git rev-parse HEAD)
       COMMIT_MSG=$(git log -1 --pretty=%s)
@@ -164,6 +178,7 @@ steps:
       NIGHTLY_LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       commit_sha: ${{ env.COMMIT_SHA }}
       commit_msg: ${{ env.COMMIT_MSG }}
+    shell: bash
     run: |
       python .github/update_json.py
 
@@ -174,13 +189,14 @@ steps:
     with:
       body: |
         **Commit:** [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+
         **Message:** ${{ github.event.head_commit.message }}
 
         This is a nightly release [created automatically with GitHub Actions workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}).
 
       files: |
-        ${{ needs.build.outputs.artifact }}
-        ${{ needs.build.outputs.artifact2 }}
+        LiveContainer.ipa
+        LiveContainer+SideStore.ipa
         .github/apps_nightly.json
 
   - name: Update apps.json in Release 1.0
