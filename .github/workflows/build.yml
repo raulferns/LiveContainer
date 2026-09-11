@@ -94,6 +94,28 @@ jobs:
           name: archive.xcarchive.tar
           path: archive.xcarchive.tar
 
+      - name: Checkout SideStore
+        uses: actions/checkout@v4
+        with:
+          repository: raulferns/SideStore
+          ref: develop
+          path: SideStoreSrc
+          submodules: recursive
+
+      - name: Build SideStore
+        shell: bash
+        run: |
+          which ldid || brew install ldid
+          which xcbeautify || brew install xcbeautify
+          cd SideStoreSrc
+          python3 scripts/ci/workflow.py build || {
+            echo "workflow.py build failed, falling back to direct make..."
+            make -B build
+            make fakesign
+            make ipa
+          }
+          cp SideStore.ipa ../SideStore.ipa
+
       - name: Create IPA
         shell: bash
         run: |
@@ -110,6 +132,12 @@ jobs:
         with:
           name: LiveContainer+SideStore.ipa
           path: LiveContainer+SideStore.ipa
+
+      - name: Upload SideStore IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SideStore.ipa
+          path: SideStore.ipa
 
   release__nightly:
     name: Nightly Release
@@ -136,10 +164,15 @@ jobs:
         with:
           name: LiveContainer.ipa
 
-      - name: Download SideStore IPA
+      - name: Download LiveContainer+SideStore IPA
         uses: actions/download-artifact@v4
         with:
           name: LiveContainer+SideStore.ipa
+
+      - name: Download SideStore IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: SideStore.ipa
 
       - name: Get Commit Info
         id: commit_info
@@ -177,6 +210,7 @@ jobs:
           files: |
             LiveContainer.ipa
             LiveContainer+SideStore.ipa
+            SideStore.ipa
             .github/apps_nightly.json
 
       - name: Update apps.json in Release 1.0

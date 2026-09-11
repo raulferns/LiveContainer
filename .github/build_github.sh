@@ -39,10 +39,24 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Key string LCOpenSideStore" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:DefaultValue bool false" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 
-# download SideStore
+# setup SideStore IPA
 cd tmp
-wget https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa
-unzip SideStore.ipa
+if [ -f ../SideStore.ipa ]; then
+    echo "Using custom built SideStore.ipa from workspace..."
+    cp ../SideStore.ipa ./SideStore.ipa
+elif [ -f ../SideStoreSrc/SideStore.ipa ]; then
+    echo "Using custom built SideStore.ipa from SideStoreSrc..."
+    cp ../SideStoreSrc/SideStore.ipa ./SideStore.ipa
+elif [ -f ./SideStore.ipa ]; then
+    echo "Using existing SideStore.ipa in tmp..."
+else
+    echo "Local SideStore.ipa not found! Falling back to downloading..."
+    wget https://github.com/raulferns/SideStore/releases/download/nightly/SideStore.ipa || {
+        echo "Falling back to official SideStore nightly..."
+        wget https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa
+    }
+fi
+unzip -q SideStore.ipa
 cd ..
 
 # SideStore
@@ -67,8 +81,8 @@ mv ./Payload/LiveContainer.app/Frameworks/SideStoreApp.framework/PlugIns/AltWidg
 mv ./Payload/LiveContainer.app/PlugIns/LiveWidgetExtension.appex/AltWidgetExtension ./Payload/LiveContainer.app/PlugIns/LiveWidgetExtension.appex/LiveWidgetExtension
 
 # Sign
-rm -r .zsign_cache
-find payloadlc/Payload -type d -name "_CodeSignature" -exec rm -r {} +
+rm -rf .zsign_cache 2>/dev/null || true
+find Payload -type d -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
 
 ldid -S.github/sidelc/LiveWidgetExtension_adhoc.xml ./Payload/LiveContainer.app/PlugIns/LiveWidgetExtension.appex/LiveWidgetExtension
 
