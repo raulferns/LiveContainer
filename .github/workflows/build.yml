@@ -22,9 +22,9 @@ env:
 
 outputs:
   scheme: ${{ steps.scheme.outputs.scheme }}
-  archive_path: ${{ env.archive_path }}
-  artifact: ${{ env.scheme }}.ipa
-  artifact2: ${{ env.scheme }}+SideStore.ipa
+  archive_path: archive
+  artifact: LiveContainer.ipa
+  artifact2: LiveContainer+SideStore.ipa
 
 steps:
   - uses: maxim-lobanov/setup-xcode@v1
@@ -95,25 +95,25 @@ steps:
   - name: Upload LiveContainer IPA
     uses: actions/upload-artifact@v7
     with:
-      name: ${{ env.scheme }}.ipa
-      path: ${{ env.scheme }}.ipa
+      name: LiveContainer.ipa
+      path: LiveContainer.ipa
 
   - name: Download SideStore Nightly IPA
     run: |
       curl -L \
         --fail \
         --retry 3 \
-        -o "${{ env.scheme }}+SideStore.ipa" \
+        -o LiveContainer+SideStore.ipa \
         "https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa"
 
-      echo "Downloaded SideStore nightly:"
-      ls -lh "${{ env.scheme }}+SideStore.ipa"
+      echo "Downloaded SideStore nightly IPA:"
+      ls -lh LiveContainer+SideStore.ipa
 
-  - name: Upload LiveContainer+SideStore
+  - name: Upload LiveContainer+SideStore IPA
     uses: actions/upload-artifact@v7
     with:
-      name: ${{ env.scheme }}+SideStore.ipa
-      path: ${{ env.scheme }}+SideStore.ipa
+      name: LiveContainer+SideStore.ipa
+      path: LiveContainer+SideStore.ipa
 ```
 
 release__nightly:
